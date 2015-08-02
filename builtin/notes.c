@@ -92,6 +92,8 @@ static const char * const git_notes_get_ref_usage[] = {
 static const char note_template[] =
 	"\nWrite/edit the notes for the following object:\n";
 
+static enum notes_merge_strategy merge_strategy;
+
 struct note_data {
 	int given;
 	int use_editor;
@@ -737,6 +739,24 @@ static int merge_commit(struct notes_merge_options *o)
 	return ret;
 }
 
+static int parse_notes_strategy(const char *arg, enum notes_merge_strategy *strategy)
+{
+	if (!strcmp(arg, "manual"))
+		*strategy = NOTES_MERGE_RESOLVE_MANUAL;
+	else if (!strcmp(arg, "ours"))
+		*strategy = NOTES_MERGE_RESOLVE_OURS;
+	else if (!strcmp(arg, "theirs"))
+		*strategy = NOTES_MERGE_RESOLVE_THEIRS;
+	else if (!strcmp(arg, "union"))
+		*strategy = NOTES_MERGE_RESOLVE_UNION;
+	else if (!strcmp(arg, "cat_sort_uniq"))
+		*strategy = NOTES_MERGE_RESOLVE_CAT_SORT_UNIQ;
+	else
+		return -1;
+
+	return 0;
+}
+
 static int merge(int argc, const char **argv, const char *prefix)
 {
 	struct strbuf remote_ref = STRBUF_INIT, msg = STRBUF_INIT;
@@ -795,22 +815,12 @@ static int merge(int argc, const char **argv, const char *prefix)
 	expand_notes_ref(&remote_ref);
 	o.remote_ref = remote_ref.buf;
 
-	if (strategy) {
-		if (!strcmp(strategy, "manual"))
-			o.strategy = NOTES_MERGE_RESOLVE_MANUAL;
-		else if (!strcmp(strategy, "ours"))
-			o.strategy = NOTES_MERGE_RESOLVE_OURS;
-		else if (!strcmp(strategy, "theirs"))
-			o.strategy = NOTES_MERGE_RESOLVE_THEIRS;
-		else if (!strcmp(strategy, "union"))
-			o.strategy = NOTES_MERGE_RESOLVE_UNION;
-		else if (!strcmp(strategy, "cat_sort_uniq"))
-			o.strategy = NOTES_MERGE_RESOLVE_CAT_SORT_UNIQ;
-		else {
-			error("Unknown -s/--strategy: %s", strategy);
-			usage_with_options(git_notes_merge_usage, options);
-		}
+	if (strategy && parse_notes_strategy(strategy, &merge_strategy)) {
+		error("Unknown -s/--strategy: %s", strategy);
+		usage_with_options(git_notes_merge_usage, options);
 	}
+
+	o.strategy = merge_strategy;
 
 	t = init_notes_check("merge");
 
@@ -945,6 +955,20 @@ static int get_ref(int argc, const char **argv, const char *prefix)
 	return 0;
 }
 
+static int git_notes_config(const char *var, const char *value, void *cb)
+{
+	if (!strcmp(var, "notes.merge")) {
+		if (!value)
+			return config_error_nonbool(var);
+		if (parse_notes_strategy(value, &merge_strategy))
+			return error("Unknown notes merge strategy: %s", value);
+		else
+			return 0;
+	}
+
+	return git_default_config(var, value, cb);
+}
+
 int cmd_notes(int argc, const char **argv, const char *prefix)
 {
 	int result;
@@ -955,7 +979,7 @@ int cmd_notes(int argc, const char **argv, const char *prefix)
 		OPT_END()
 	};
 
-	git_config(git_default_config, NULL);
+	git_config(git_notes_config, NULL);
 	argc = parse_options(argc, argv, prefix, options, git_notes_usage,
 			     PARSE_OPT_STOP_AT_NON_OPTION);
 
