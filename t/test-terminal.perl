@@ -5,15 +5,17 @@ use warnings;
 use IO::Pty;
 use File::Copy;
 
-# Run @$argv in the background with stdio redirected to $out and $err.
+# Run @$argv in the background with stdio redirected to $in, $out and $err.
 sub start_child {
-	my ($argv, $out, $err) = @_;
+	my ($argv, $in, $out, $err) = @_;
 	my $pid = fork;
 	if (not defined $pid) {
 		die "fork failed: $!"
 	} elsif ($pid == 0) {
+		open STDIN, "<&", $in;
 		open STDOUT, ">&", $out;
 		open STDERR, ">&", $err;
+		close $in;
 		close $out;
 		exec(@$argv) or die "cannot exec '$argv->[0]': $!"
 	}
@@ -50,14 +52,23 @@ sub xsendfile {
 }
 
 sub copy_stdio {
-	my ($out, $err) = @_;
+	my ($in, $out, $err) = @_;
 	my $pid = fork;
+	if (!$pid) {
+		close($out);
+		close($err);
+		xsendfile($in, \*STDIN);
+		exit 0;
+	}
+	$pid = fork;
 	defined $pid or die "fork failed: $!";
 	if (!$pid) {
+		close($in);
 		close($out);
 		xsendfile(\*STDERR, $err);
 		exit 0;
 	}
+	close($in);
 	close($err);
 	xsendfile(\*STDOUT, $out);
 	finish_child($pid) == 0
@@ -67,14 +78,18 @@ sub copy_stdio {
 if ($#ARGV < 1) {
 	die "usage: test-terminal program args";
 }
+my $master_in = new IO::Pty;
 my $master_out = new IO::Pty;
 my $master_err = new IO::Pty;
+$master_in->set_raw();
 $master_out->set_raw();
 $master_err->set_raw();
+$master_in->slave->set_raw();
 $master_out->slave->set_raw();
 $master_err->slave->set_raw();
-my $pid = start_child(\@ARGV, $master_out->slave, $master_err->slave);
+my $pid = start_child(\@ARGV, $master_in->slave, $master_out->slave, $master_err->slave);
+close $master_in->slave;
 close $master_out->slave;
 close $master_err->slave;
-copy_stdio($master_out, $master_err);
+copy_stdio($master_in, $master_out, $master_err);
 exit(finish_child($pid));
