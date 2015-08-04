@@ -1446,6 +1446,7 @@ int git_open_noatime(const char *name)
 	static int sha1_file_open_flag = O_NOATIME;
 
 	for (;;) {
+		errno = 0;
 		int fd = open(name, O_RDONLY | sha1_file_open_flag);
 		if (fd >= 0)
 			return fd;
