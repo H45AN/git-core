@@ -92,7 +92,7 @@ static const char * const git_notes_get_ref_usage[] = {
 static const char note_template[] =
 	"\nWrite/edit the notes for the following object:\n";
 
-static enum notes_merge_strategy merge_strategy;
+static enum notes_merge_strategy configured_merge_strategy;
 
 struct note_data {
 	int given;
@@ -815,12 +815,11 @@ static int merge(int argc, const char **argv, const char *prefix)
 	expand_notes_ref(&remote_ref);
 	o.remote_ref = remote_ref.buf;
 
-	if (strategy && parse_notes_strategy(strategy, &merge_strategy)) {
+	o.strategy = configured_merge_strategy;
+	if (strategy && parse_notes_strategy(strategy, &o.strategy)) {
 		error("Unknown -s/--strategy: %s", strategy);
 		usage_with_options(git_notes_merge_usage, options);
 	}
-
-	o.strategy = merge_strategy;
 
 	t = init_notes_check("merge");
 
@@ -960,7 +959,7 @@ static int git_notes_config(const char *var, const char *value, void *cb)
 	if (!strcmp(var, "notes.merge")) {
 		if (!value)
 			return config_error_nonbool(var);
-		if (parse_notes_strategy(value, &merge_strategy))
+		if (parse_notes_strategy(value, &configured_merge_strategy))
 			return error("Unknown notes merge strategy: %s", value);
 		else
 			return 0;
