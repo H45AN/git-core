@@ -51,24 +51,26 @@ sub xsendfile {
 	copy($in, $out, 4096) or $!{EIO} or die "cannot copy from child: $!";
 }
 
-sub copy_stdio {
-	my ($in, $out, $err) = @_;
+sub copy_stdin {
+	my ($in) = @_;
 	my $pid = fork;
 	if (!$pid) {
-		close($out);
-		close($err);
 		xsendfile($in, \*STDIN);
 		exit 0;
 	}
-	$pid = fork;
+	close($in);
+	return $pid;
+}
+
+sub copy_stdio {
+	my ($out, $err) = @_;
+	my $pid = fork;
 	defined $pid or die "fork failed: $!";
 	if (!$pid) {
-		close($in);
 		close($out);
 		xsendfile(\*STDERR, $err);
 		exit 0;
 	}
-	close($in);
 	close($err);
 	xsendfile(\*STDOUT, $out);
 	finish_child($pid) == 0
@@ -91,5 +93,12 @@ my $pid = start_child(\@ARGV, $master_in->slave, $master_out->slave, $master_err
 close $master_in->slave;
 close $master_out->slave;
 close $master_err->slave;
-copy_stdio($master_in, $master_out, $master_err);
-exit(finish_child($pid));
+my $in_pid = copy_stdin($master_in);
+copy_stdio($master_out, $master_err);
+my $ret = finish_child($pid);
+# If the child process terminates before our copy_stdin() process is able to
+# write all of its data to $master_in, the copy_stdin() process could stall.
+# Send SIGTERM to it to ensure it terminates.
+kill 'TERM', $in_pid;
+finish_child($in_pid);
+exit($ret);
