@@ -631,6 +631,7 @@ static struct untracked_cache_dir *lookup_untracked(struct untracked_cache *uc,
 	memset(d, 0, sizeof(*d));
 	memcpy(d->name, name, len);
 	d->name[len] = '\0';
+	d->depth = dir->depth + 1;
 
 	ALLOC_GROW(dir->dirs, dir->dirs_nr + 1, dir->dirs_alloc);
 	memmove(dir->dirs + first + 1, dir->dirs + first,
@@ -1324,7 +1325,19 @@ static enum path_treatment treat_directory(struct dir_struct *dir,
 	if (!(dir->flags & DIR_HIDE_EMPTY_DIRECTORIES))
 		return exclude ? path_excluded : path_untracked;
 
-	untracked = lookup_untracked(dir->untracked, untracked, dirname, len);
+	if (untracked) {
+		const char *cur = dirname;
+		int i;
+
+		for (i = 0; i < untracked->depth; i++) {
+			cur = strchr(cur, '/');
+			assert(cur);
+			cur++;
+		}
+		untracked = lookup_untracked(dir->untracked, untracked,
+					     cur,
+					     len - (cur - dirname));
+	}
 	return read_directory_recursive(dir, dirname, len,
 					untracked, 1, simplify);
 }
@@ -2431,7 +2444,7 @@ static void stat_data_from_disk(struct stat_data *to, const struct stat_data *fr
 }
 
 static int read_one_dir(struct untracked_cache_dir **untracked_,
-			struct read_data *rd)
+			struct read_data *rd, int depth)
 {
 	struct untracked_cache_dir ud, *untracked;
 	const unsigned char *next, *data = rd->data, *end = rd->end;
@@ -2444,6 +2457,7 @@ static int read_one_dir(struct untracked_cache_dir **untracked_,
 	value = decode_varint(&next);
 	if (next > end)
 		return -1;
+	ud.depth = depth;
 	ud.recurse	   = 1;
 	ud.untracked_alloc = value;
 	ud.untracked_nr	   = value;
@@ -2480,7 +2494,7 @@ static int read_one_dir(struct untracked_cache_dir **untracked_,
 	rd->data = data;
 
 	for (i = 0; i < untracked->dirs_nr; i++) {
-		len = read_one_dir(untracked->dirs + i, rd);
+		len = read_one_dir(untracked->dirs + i, rd, depth + 1);
 		if (len < 0)
 			return -1;
 	}
@@ -2577,7 +2591,7 @@ struct untracked_cache *read_untracked_extension(const void *data, unsigned long
 	rd.index      = 0;
 	rd.ucd        = xmalloc(sizeof(*rd.ucd) * len);
 
-	if (read_one_dir(&uc->root, &rd) || rd.index != len)
+	if (read_one_dir(&uc->root, &rd, 0) || rd.index != len)
 		goto done;
 
 	next = rd.data;
@@ -2614,20 +2628,32 @@ done2:
 	return uc;
 }
 
+static struct untracked_cache_dir *lookup_untracked_recursive(
+	struct untracked_cache *uc, struct untracked_cache_dir *dir,
+	const char *path, int len)
+{
+	const char *rest = strchr(path, '/');
+
+	if (rest) {
+		int component_len = rest - path;
+		struct untracked_cache_dir *d =
+			lookup_untracked(uc, dir, path, component_len);
+		return lookup_untracked_recursive(uc, d, rest + 1,
+						  len - (component_len + 1));
+	} else {
+		return dir;
+	}
+}
+
 void untracked_cache_invalidate_path(struct index_state *istate,
 				     const char *path)
 {
-	const char *sep;
 	struct untracked_cache_dir *d;
 	if (!istate->untracked || !istate->untracked->root)
 		return;
-	sep = strrchr(path, '/');
-	if (sep)
-		d = lookup_untracked(istate->untracked,
-				     istate->untracked->root,
-				     path, sep - path);
-	else
-		d = istate->untracked->root;
+	d = lookup_untracked_recursive(istate->untracked,
+				       istate->untracked->root,
+				       path, strlen(path));
 	istate->untracked->dir_invalidated++;
 	d->valid = 0;
 	d->untracked_nr = 0;
