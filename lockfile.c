@@ -80,7 +80,7 @@ static int lock_file(struct lock_file *lk, const char *path, int flags)
 		resolve_symlink(&filename);
 
 	strbuf_addstr(&filename, LOCK_SUFFIX);
-	fd = create_tempfile(&lk->tempfile, filename.buf);
+	fd = create_tempfile(&lk->_tempfile, filename.buf);
 	strbuf_release(&filename);
 	return fd;
 }
@@ -232,7 +232,7 @@ char *get_locked_file_path(struct lock_file *lk)
 {
 	struct strbuf ret = STRBUF_INIT;
 
-	strbuf_addstr(&ret, get_tempfile_path(&lk->tempfile));
+	strbuf_addstr(&ret, get_tempfile_path(&lk->_tempfile));
 	if (ret.len <= LOCK_SUFFIX_LEN ||
 	    strcmp(ret.buf + ret.len - LOCK_SUFFIX_LEN, LOCK_SUFFIX))
 		die("BUG: get_locked_file_path() called for malformed lock object");

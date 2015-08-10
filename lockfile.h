@@ -108,7 +108,7 @@
 #include "tempfile.h"
 
 struct lock_file {
-	struct tempfile tempfile;
+	struct tempfile _tempfile;
 };
 
 /* String appended to a filename to derive the lockfile name: */
@@ -201,7 +201,7 @@ extern NORETURN void unable_to_lock_die(const char *path, int err);
  */
 static inline FILE *fdopen_lock_file(struct lock_file *lk, const char *mode)
 {
-	return fdopen_tempfile(&lk->tempfile, mode);
+	return fdopen_tempfile(&lk->_tempfile, mode);
 }
 
 /*
@@ -210,17 +210,17 @@ static inline FILE *fdopen_lock_file(struct lock_file *lk, const char *mode)
  */
 static inline const char *get_lock_file_path(struct lock_file *lk)
 {
-	return get_tempfile_path(&lk->tempfile);
+	return get_tempfile_path(&lk->_tempfile);
 }
 
 static inline int get_lock_file_fd(struct lock_file *lk)
 {
-	return get_tempfile_fd(&lk->tempfile);
+	return get_tempfile_fd(&lk->_tempfile);
 }
 
 static inline FILE *get_lock_file_fp(struct lock_file *lk)
 {
-	return get_tempfile_fp(&lk->tempfile);
+	return get_tempfile_fp(&lk->_tempfile);
 }
 
 /*
@@ -240,7 +240,7 @@ extern char *get_locked_file_path(struct lock_file *lk);
  */
 static inline int close_lock_file(struct lock_file *lk)
 {
-	return close_tempfile(&lk->tempfile);
+	return close_tempfile(&lk->_tempfile);
 }
 
 /*
@@ -264,7 +264,7 @@ static inline int close_lock_file(struct lock_file *lk)
  */
 static inline int reopen_lock_file(struct lock_file *lk)
 {
-	return reopen_tempfile(&lk->tempfile);
+	return reopen_tempfile(&lk->_tempfile);
 }
 
 /*
@@ -284,7 +284,7 @@ extern int commit_lock_file(struct lock_file *lk);
  */
 static inline int commit_lock_file_to(struct lock_file *lk, const char *path)
 {
-	return rename_tempfile(&lk->tempfile, path);
+	return rename_tempfile(&lk->_tempfile, path);
 }
 
 /*
@@ -295,7 +295,7 @@ static inline int commit_lock_file_to(struct lock_file *lk, const char *path)
  */
 static inline void rollback_lock_file(struct lock_file *lk)
 {
-	delete_tempfile(&lk->tempfile);
+	delete_tempfile(&lk->_tempfile);
 }
 
 #endif /* LOCKFILE_H */
