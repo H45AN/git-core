@@ -10,6 +10,7 @@
 #include "string-list.h"
 #include "parse-options.h"
 #include "submodule.h"
+#include "pathspec.h"
 
 static const char * const builtin_mv_usage[] = {
 	N_("git mv [<options>] <source>... <destination>"),
@@ -20,13 +21,19 @@ static const char * const builtin_mv_usage[] = {
 #define KEEP_TRAILING_SLASH 2
 
 static const char **internal_copy_pathspec(const char *prefix,
-					   const char **pathspec,
+					   const char **argv,
 					   int count, unsigned flags)
 {
 	int i;
+	struct pathspec ps;
 	const char **result = xmalloc((count + 1) * sizeof(const char *));
-	memcpy(result, pathspec, count * sizeof(const char *));
+	memcpy(result, argv, count * sizeof(const char *));
 	result[count] = NULL;
+
+	/*
+	 * NEEDSWORK: instead of preprocessing, pass the right flags to
+	 * parse_pathspec below.
+	 */
 	for (i = 0; i < count; i++) {
 		int length = strlen(result[i]);
 		int to_copy = length;
@@ -42,7 +49,13 @@ static const char **internal_copy_pathspec(const char *prefix,
 				result[i] = it;
 		}
 	}
-	return get_pathspec(prefix, result);
+
+	parse_pathspec(&ps,
+		       PATHSPEC_ALL_MAGIC &
+		       ~(PATHSPEC_FROMTOP | PATHSPEC_LITERAL),
+		       PATHSPEC_PREFER_CWD,
+		       prefix, result);
+	return ps._raw;
 }
 
 static const char *add_slash(const char *path)
