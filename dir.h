@@ -109,6 +109,7 @@ struct sha1_stat {
  *  excludes_file_sha1[])
  */
 struct untracked_cache_dir {
+	unsigned int depth;
 	struct untracked_cache_dir **dirs;
 	char **untracked;
 	struct stat_data stat_data;
